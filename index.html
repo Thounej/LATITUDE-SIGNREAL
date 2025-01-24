@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Latitude Signs</title>
+    <style>
+      body {
+        background-color: #121212;
+        color: #ffffff;
+        font-family: "Courier New", Courier, monospace;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+      }
+      h1 {
+        font-size: 2rem;
+        margin-bottom: 20px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 90%;
+        max-width: 1200px;
+      }
+      th {
+        padding: 10px;
+        text-align: center;
+        font-size: 1.2rem;
+        width: 200px;
+      }
+      td {
+        padding: 10px;
+        text-align: center;
+        vertical-align: top;
+        width: 200px;
+      }
+      img {
+        width: 100%;
+        max-width: 180px;
+        cursor: pointer;
+        transition: transform 0.2s ease;
+        display: block;
+        margin: 5px auto;
+      }
+      img:hover {
+        transform: scale(1.05);
+      }
+      .hidden {
+        display: none;
+      }
+      .tag {
+        display: inline-block;
+        padding: 5px 10px;
+        margin: 5px;
+        background-color: #333;
+        color: #fff;
+        border: 1px solid #555;
+        border-radius: 3px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .tag.selected {
+        background-color: #007bff;
+        border-color: #0056b3;
+      }
+      .notification {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: #4caf50;
+        color: white;
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        font-size: 14px;
+        z-index: 9999;
+        opacity: 1;
+        transition: opacity 0.4s ease-out;
+      }
+      .fade-out {
+        opacity: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>LATITUDE SIGNS</h1>
+
+    <div id="tagContainer">
+      <p>Select tags to filter images:</p>
+    </div>
+
+    <table id="imageTable">
+      <thead>
+        <tr>
+          <th>2x1 Names</th>
+          <th>4x1 Names</th>
+          <th>2x1</th>
+          <th>2x1 SidePad</th>
+          <th>2x1 Overlay</th>
+          <th>4x1</th>
+          <th>4x1 Sidepad</th>
+          <th>4x1 Overlay</th>
+          <th>6x1 CP</th>
+          <th>6x1 Text</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td id="column1"></td>
+          <td id="column2"></td>
+          <td id="column3"></td>
+          <td id="column4"></td>
+          <td id="column5"></td>
+          <td id="column6"></td>
+          <td id="column7"></td>
+          <td id="column8"></td>
+          <td id="column9"></td>
+          <td id="column10"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <script>
+      const tagContainer = document.getElementById("tagContainer");
+      const colorSet = new Set();
+      const selectedTags = new Set();
+
+      async function loadImages() {
+        try {
+          const response = await fetch("images.json");
+          const imageData = await response.json();
+
+          // Iterate through each column
+          Object.entries(imageData).forEach(
+            ([columnName, colorData], columnIndex) => {
+              const column = document.getElementById(
+                `column${columnIndex + 1}`,
+              );
+              if (!column) return;
+
+              // Flatten the color data for the column,
+              // This is to make sure the columns are sorted as a whole.
+              const flattenedItems = [];
+              Object.entries(colorData).forEach(([color, items]) => {
+                colorSet.add(color);
+
+                items.forEach(({ link, order }) => {
+                  flattenedItems.push({ link, order, Color: color });
+                });
+              });
+
+              // Sort on the order thingybob we created in python.
+              const sortedItems = flattenedItems.sort(
+                (a, b) => a.order - b.order,
+              );
+
+              sortedItems.forEach(({ link, Color }) => {
+                const img = document.createElement("img");
+                img.src = link;
+                img.alt = Color;
+                img.dataset.color = Color;
+                img.onclick = () => copyToClipboard(link);
+                column.appendChild(img);
+              });
+            },
+          );
+
+          createTags();
+        } catch (error) {
+          console.error("Error loading images:", error);
+        }
+      }
+      function createTags() {
+        tagContainer.innerHTML = "";
+
+        const sortedColors = Array.from(colorSet).sort((a, b) => {
+          if (a === "Other") return -1;
+          if (b === "Other") return 1;
+          return a.localeCompare(b);
+        });
+
+        // Create and append tags in the sorted order
+        sortedColors.forEach((color) => {
+          const tag = document.createElement("span");
+          tag.className = "tag";
+          tag.innerText = color; // Use the color name for the tag text
+          tag.dataset.color = color; // Store the color name in the dataset
+          tag.onclick = () => toggleTagSelection(tag); // Attach the toggle function
+          tagContainer.appendChild(tag); // Add the tag to the tag container
+        });
+      }
+
+      function toggleTagSelection(tag) {
+        const color = tag.dataset.color;
+        if (selectedTags.has(color)) {
+          selectedTags.delete(color);
+          tag.classList.remove("selected");
+        } else {
+          selectedTags.add(color);
+          tag.classList.add("selected");
+        }
+        applyFilter();
+      }
+
+      function applyFilter() {
+        const columns = document.querySelectorAll("[id^='column']");
+
+        columns.forEach((column) => {
+          const images = column.querySelectorAll("img");
+          images.forEach((img) => {
+            const color = img.dataset.color;
+            if (selectedTags.size === 0 || selectedTags.has(color)) {
+              img.classList.remove("hidden");
+            } else {
+              img.classList.add("hidden");
+            }
+          });
+        });
+      }
+
+      function copyToClipboard(link) {
+        // copy stuff doesn't always work. This is a famous workaround
+        // We use navigator.clipboard when able,
+        // Otherwise, we use the 'out of viewport hidden text area' trick.
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard
+            .writeText(link)
+            .then(() => {
+              showNotification(`Copied: ${link}`);
+            })
+            .catch((err) => {
+              console.error("Could not copy text: ", err);
+            });
+        } else {
+          const textArea = document.createElement("textarea");
+          textArea.value = link;
+          textArea.style.position = "absolute";
+          textArea.style.left = "-9999px";
+          document.body.appendChild(textArea);
+          textArea.select();
+          textArea.setSelectionRange(0, textArea.value.length);
+          try {
+            document.execCommand("copy");
+            showNotification(`Copied: ${link}`);
+          } catch (err) {
+            console.error("Fallback: Could not copy text: ", err);
+          }
+
+          document.body.removeChild(textArea);
+        }
+      }
+
+      function showNotification(message) {
+        const notification = document.createElement("div");
+        notification.textContent = message;
+        notification.className = "notification";
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+          notification.classList.add("fade-out");
+        }, 800);
+
+        setTimeout(() => {
+          document.body.removeChild(notification);
+        }, 1200);
+      }
+
+      loadImages();
+    </script>
+  </body>
+</html>
